@@ -16,32 +16,25 @@ import {
   User,
   Dumbbell
 } from 'lucide-react';
-import { useRoutines } from '@/hooks/useClients';
-import type { Routine } from '@/hooks/useClients';
+import { useLocalRoutines } from '@/hooks/useLocalRoutines';
+import type { LocalRoutine } from '@/hooks/useLocalRoutines';
 
 interface TemplateManagerProps {
   onBack: () => void;
-  onEditTemplate?: (template: Routine) => void;
 }
 
-const TemplateManager: React.FC<TemplateManagerProps> = ({ onBack, onEditTemplate }) => {
-  const [templates, setTemplates] = useState<Routine[]>([]);
+const TemplateManager: React.FC<TemplateManagerProps> = ({ onBack }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredTemplates, setFilteredTemplates] = useState<Routine[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<Routine | null>(null);
+  const [filteredTemplates, setFilteredTemplates] = useState<any[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
   const [showDetails, setShowDetails] = useState(false);
 
-  const { getTemplates, saveTemplate } = useRoutines();
-
-  useEffect(() => {
-    loadTemplates();
-  }, []);
+  const { templates, deleteTemplate } = useLocalRoutines();
 
   useEffect(() => {
     if (searchTerm.trim()) {
       const filtered = templates.filter(template =>
-        template.nombrePlantilla?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        template.profesorNombre.toLowerCase().includes(searchTerm.toLowerCase())
+        template.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredTemplates(filtered);
     } else {
@@ -49,59 +42,28 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ onBack, onEditTemplat
     }
   }, [searchTerm, templates]);
 
-  const loadTemplates = () => {
-    const templateList = getTemplates();
-    // Ordenar alfabéticamente por nombre de plantilla
-    const sortedTemplates = templateList.sort((a, b) => 
-      (a.nombrePlantilla || '').localeCompare(b.nombrePlantilla || '')
-    );
-    setTemplates(sortedTemplates);
-    setFilteredTemplates(sortedTemplates);
-    console.log('Plantillas cargadas:', sortedTemplates);
-  };
-
-  const handleDeleteTemplate = (templateId: string) => {
+  const handleDeleteTemplate = async (templateId: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar esta plantilla?')) {
-      try {
-        const updatedTemplates = templates.filter(t => t.id !== templateId);
-        localStorage.setItem('gym_templates', JSON.stringify(updatedTemplates));
-        loadTemplates();
+      const result = await deleteTemplate(templateId);
+      if (result.success) {
         alert('Plantilla eliminada exitosamente');
-      } catch (error) {
-        console.error('Error al eliminar plantilla:', error);
-        alert('Error al eliminar la plantilla');
+      } else {
+        alert(result.error || 'Error al eliminar la plantilla');
       }
     }
   };
 
-  const handleDuplicateTemplate = (template: Routine) => {
-    const newTemplate = {
-      ...template,
-      id: Date.now().toString(),
-      nombrePlantilla: `${template.nombrePlantilla} (Copia)`,
-      fechaCreacion: new Date().toISOString().split('T')[0]
-    };
-
-    const success = saveTemplate(newTemplate, newTemplate.nombrePlantilla || '');
-    if (success) {
-      loadTemplates();
-      alert('Plantilla duplicada exitosamente');
-    } else {
-      alert('Error al duplicar la plantilla');
-    }
-  };
-
-  const countExercises = (template: Routine) => {
+  const countExercises = (template: any) => {
     let total = 0;
-    Object.values(template.dias).forEach(day => {
-      total += day.entradaCalor.length + day.entrenamiento.length;
+    Object.values(template.routine.dias).forEach((day: any) => {
+      total + day.entradaCalor.length + day.entrenamiento.length;
     });
     return total;
   };
 
-  const countDaysWithExercises = (template: Routine) => {
+  const countDaysWithExercises = (template: any) => {
     let count = 0;
-    Object.values(template.dias).forEach(day => {
+    Object.values(template.routine.dias).forEach((day: any) => {
       if (day.entradaCalor.length > 0 || day.entrenamiento.length > 0) {
         count++;
       }
@@ -194,19 +156,20 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ onBack, onEditTemplat
               <Card key={template.id} className="hover:shadow-lg transition-shadow cursor-pointer border-l-4 border-l-orange-500">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                  <div className="flex-1">
                       <CardTitle className="text-lg text-orange-700 mb-2">
-                        {template.nombrePlantilla || 'Sin nombre'}
+                        {template.nombre || 'Sin nombre'}
                       </CardTitle>
                       <div className="space-y-1 text-sm text-gray-600">
                         <div className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          <span>{template.profesorNombre}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
-                          <span>{template.fechaCreacion}</span>
+                          <span>Creada: {new Date(template.created_at).toLocaleDateString()}</span>
                         </div>
+                        {template.comentarios && (
+                          <p className="text-sm text-gray-500 italic mt-1 line-clamp-2">
+                            {template.comentarios}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -237,19 +200,22 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ onBack, onEditTemplat
                         </DialogTrigger>
                         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
-                            <DialogTitle>{selectedTemplate?.nombrePlantilla}</DialogTitle>
+                            <DialogTitle>{selectedTemplate?.nombre}</DialogTitle>
                           </DialogHeader>
                           <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               <div>
-                                <strong>Profesor:</strong> {selectedTemplate?.profesorNombre}
-                              </div>
-                              <div>
-                                <strong>Fecha:</strong> {selectedTemplate?.fechaCreacion}
+                                <strong>Fecha:</strong> {selectedTemplate ? new Date(selectedTemplate.created_at).toLocaleDateString() : ''}
                               </div>
                             </div>
+                            {selectedTemplate?.comentarios && (
+                              <div className="bg-orange-50 border border-orange-100 rounded-md p-3 text-sm text-gray-700">
+                                <p className="font-medium text-orange-700 mb-1">Comentarios</p>
+                                <p className="whitespace-pre-wrap">{selectedTemplate.comentarios}</p>
+                              </div>
+                            )}
                             
-                            {selectedTemplate && Object.entries(selectedTemplate.dias).map(([dayKey, dayData], index) => {
+                            {selectedTemplate && Object.entries(selectedTemplate.routine.dias).map(([dayKey, dayData]: [string, any], index) => {
                               const totalExercises = dayData.entradaCalor.length + dayData.entrenamiento.length;
                               if (totalExercises === 0) return null;
                               
@@ -288,15 +254,6 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ onBack, onEditTemplat
                           </div>
                         </DialogContent>
                       </Dialog>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDuplicateTemplate(template)}
-                        className="flex items-center gap-1"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
 
                       <Button
                         variant="destructive"
